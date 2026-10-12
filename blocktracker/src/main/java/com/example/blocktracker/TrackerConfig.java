@@ -21,7 +21,6 @@ public class TrackerConfig {
 	public static final int MAX_RADIUS = 64;
 
 	public boolean enabled = true;
-	public boolean throughWalls = true;
 	public int radius = 24;
 	public float lineAlpha = 1.0f;
 	public Map<String, String> blocks = new LinkedHashMap<>();

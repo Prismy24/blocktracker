@@ -1,11 +1,12 @@
 package com.example.blocktracker;
 
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.world.ClientWorld;
-import net.minecraft.registry.Registries;
-import net.minecraft.util.math.BlockPos;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.Identifier;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -37,9 +38,9 @@ public final class BlockScanner {
 		return hits;
 	}
 
-	public static void tick(MinecraftClient client) {
+	public static void tick(Minecraft client) {
 		TrackerConfig cfg = TrackerConfig.get();
-		if (client.world == null || client.player == null || !cfg.enabled || cfg.blocks.isEmpty()) {
+		if (client.level == null || client.player == null || !cfg.enabled || cfg.blocks.isEmpty()) {
 			hits = List.of();
 			return;
 		}
@@ -48,15 +49,15 @@ public final class BlockScanner {
 		}
 		tickCounter = 0;
 		dirty = false;
-		hits = scan(client.world, client.player.getBlockPos(), cfg);
+		hits = scan(client.level, client.player.blockPosition(), cfg);
 	}
 
-	private static List<Hit> scan(ClientWorld world, BlockPos center, TrackerConfig cfg) {
+	private static List<Hit> scan(ClientLevel level, BlockPos center, TrackerConfig cfg) {
 		Map<Block, Integer> wanted = new HashMap<>();
 		for (Map.Entry<String, String> e : cfg.blocks.entrySet()) {
-			net.minecraft.util.Identifier id = net.minecraft.util.Identifier.tryParse(e.getKey());
-			if (id != null && Registries.BLOCK.containsId(id)) {
-				wanted.put(Registries.BLOCK.get(id), TrackerConfig.parseColor(e.getValue()));
+			Identifier id = Identifier.tryParse(e.getKey());
+			if (id != null && BuiltInRegistries.BLOCK.containsKey(id)) {
+				wanted.put(BuiltInRegistries.BLOCK.getValue(id), TrackerConfig.parseColor(e.getValue()));
 			}
 		}
 		if (wanted.isEmpty()) {
@@ -64,22 +65,24 @@ public final class BlockScanner {
 		}
 
 		int r = cfg.radius;
-		int minY = Math.max(world.getBottomY(), center.getY() - r);
-		int maxY = Math.min(world.getBottomY() + world.getHeight() - 1, center.getY() + r);
+		int levelMinY = level.getMinY();
+		int levelMaxY = levelMinY + level.getHeight() - 1;
+		int minY = Math.max(levelMinY, center.getY() - r);
+		int maxY = Math.min(levelMaxY, center.getY() + r);
 
 		List<Hit> found = new ArrayList<>();
-		BlockPos.Mutable pos = new BlockPos.Mutable();
+		BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
 		for (int x = center.getX() - r; x <= center.getX() + r; x++) {
 			for (int z = center.getZ() - r; z <= center.getZ() + r; z++) {
-				if (!world.getChunkManager().isChunkLoaded(x >> 4, z >> 4)) {
+				if (!level.getChunkSource().hasChunk(x >> 4, z >> 4)) {
 					continue;
 				}
 				for (int y = minY; y <= maxY; y++) {
 					pos.set(x, y, z);
-					BlockState state = world.getBlockState(pos);
+					BlockState state = level.getBlockState(pos);
 					Integer rgb = wanted.get(state.getBlock());
 					if (rgb != null) {
-						found.add(new Hit(pos.toImmutable(), rgb));
+						found.add(new Hit(pos.immutable(), rgb));
 						if (found.size() >= MAX_HITS) {
 							return found;
 						}

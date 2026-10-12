@@ -7,9 +7,9 @@ import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
-import net.minecraft.registry.Registries;
-import net.minecraft.text.Text;
-import net.minecraft.util.Identifier;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
 
 import java.util.Map;
 
@@ -18,9 +18,11 @@ import java.util.Map;
  * /track remove <block>
  * /track list
  * /track radius <1-64>
- * /track walls <true|false>
  * /track alpha <0.05-1>
  * /track toggle
+ *
+ * The block (and colour) are read as one "greedy" argument and split on spaces,
+ * because Brigadier's plain word argument cannot contain ':' or '#'.
  */
 public final class TrackerCommands {
 	private TrackerCommands() {}
@@ -28,21 +30,21 @@ public final class TrackerCommands {
 	public static LiteralArgumentBuilder<FabricClientCommandSource> build() {
 		return ClientCommandManager.literal("track")
 			.then(ClientCommandManager.literal("add")
-				.then(ClientCommandManager.argument("block", StringArgumentType.word())
+				.then(ClientCommandManager.argument("args", StringArgumentType.greedyString())
 					.suggests((c, b) -> {
 						String typed = b.getRemaining().toLowerCase();
-						Registries.BLOCK.getIds().stream()
-							.map(Identifier::toString)
-							.filter(s -> s.contains(typed) || s.replace("minecraft:", "").startsWith(typed))
-							.limit(100)
-							.forEach(b::suggest);
+						if (!typed.contains(" ")) {
+							BuiltInRegistries.BLOCK.keySet().stream()
+								.map(Identifier::toString)
+								.filter(s -> s.contains(typed))
+								.limit(100)
+								.forEach(b::suggest);
+						}
 						return b.buildFuture();
 					})
-					.executes(c -> add(c, null))
-					.then(ClientCommandManager.argument("color", StringArgumentType.word())
-						.executes(c -> add(c, StringArgumentType.getString(c, "color"))))))
+					.executes(TrackerCommands::add)))
 			.then(ClientCommandManager.literal("remove")
-				.then(ClientCommandManager.argument("block", StringArgumentType.word())
+				.then(ClientCommandManager.argument("block", StringArgumentType.greedyString())
 					.suggests((c, b) -> {
 						TrackerConfig.get().blocks.keySet().forEach(b::suggest);
 						return b.buildFuture();
@@ -57,15 +59,6 @@ public final class TrackerCommands {
 						cfg.save();
 						BlockScanner.markDirty();
 						msg(c, "Scan radius set to " + cfg.radius);
-						return 1;
-					})))
-			.then(ClientCommandManager.literal("walls")
-				.then(ClientCommandManager.argument("value", com.mojang.brigadier.arguments.BoolArgumentType.bool())
-					.executes(c -> {
-						TrackerConfig cfg = TrackerConfig.get();
-						cfg.throughWalls = com.mojang.brigadier.arguments.BoolArgumentType.getBool(c, "value");
-						cfg.save();
-						msg(c, "Through walls: " + cfg.throughWalls);
 						return 1;
 					})))
 			.then(ClientCommandManager.literal("alpha")
@@ -91,15 +84,30 @@ public final class TrackerCommands {
 		BlockScanner.markDirty();
 	}
 
-	private static int add(CommandContext<FabricClientCommandSource> c, String color) {
-		String raw = StringArgumentType.getString(c, "block");
-		Identifier id = Identifier.tryParse(raw.contains(":") ? raw : "minecraft:" + raw);
-		if (id == null || !Registries.BLOCK.containsId(id)) {
-			msg(c, "Unknown block: " + raw);
+	/** Accepts "iron_ore" or "minecraft:iron_ore". */
+	private static Identifier parseBlockId(String raw) {
+		return Identifier.tryParse(raw.contains(":") ? raw : "minecraft:" + raw);
+	}
+
+	private static int add(CommandContext<FabricClientCommandSource> c) {
+		String[] parts = StringArgumentType.getString(c, "args").trim().split("\\s+");
+		Identifier id = parseBlockId(parts[0]);
+		if (id == null || !BuiltInRegistries.BLOCK.containsKey(id)) {
+			msg(c, "Unknown block: " + parts[0]);
 			return 0;
 		}
 		String key = id.toString();
-		String hex = color != null ? (color.startsWith("#") ? color : "#" + color) : TrackerConfig.autoColor(key);
+		String hex;
+		if (parts.length < 2) {
+			hex = TrackerConfig.autoColor(key);
+		} else {
+			String digits = parts[1].replace("#", "");
+			if (!digits.matches("[0-9a-fA-F]{6}")) {
+				msg(c, "Colour must be 6 hex digits, e.g. #FF0000");
+				return 0;
+			}
+			hex = "#" + digits.toUpperCase();
+		}
 		TrackerConfig cfg = TrackerConfig.get();
 		cfg.blocks.put(key, hex);
 		cfg.save();
@@ -109,8 +117,8 @@ public final class TrackerCommands {
 	}
 
 	private static int remove(CommandContext<FabricClientCommandSource> c) {
-		String raw = StringArgumentType.getString(c, "block");
-		String key = raw.contains(":") ? raw : "minecraft:" + raw;
+		Identifier id = parseBlockId(StringArgumentType.getString(c, "block").trim());
+		String key = id == null ? "" : id.toString();
 		TrackerConfig cfg = TrackerConfig.get();
 		if (cfg.blocks.remove(key) == null) {
 			msg(c, "Not tracking " + key);
@@ -137,6 +145,6 @@ public final class TrackerCommands {
 	}
 
 	private static void msg(CommandContext<FabricClientCommandSource> c, String text) {
-		c.getSource().sendFeedback(Text.literal(text));
+		c.getSource().sendFeedback(Component.literal(text));
 	}
 }

@@ -3,7 +3,7 @@
   "id": "blocktracker",
   "version": "${version}",
   "name": "Block Tracker",
-  "description": "Outlines chosen block types around you, optionally through walls. Toggle with K, configure with /track.",
+  "description": "Outlines chosen block types around you. Toggle with K, configure with /track.",
   "authors": ["You"],
   "license": "MIT",
   "environment": "client",
@@ -11,8 +11,8 @@
     "client": ["com.example.blocktracker.BlockTrackerClient"]
   },
   "depends": {
-    "fabricloader": ">=0.16.10",
-    "minecraft": "~1.21.4",
+    "fabricloader": ">=0.19.3",
+    "minecraft": "~1.21.11",
     "java": ">=21",
     "fabric-api": "*"
   }
