@@ -4,8 +4,8 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderContext;
 import net.minecraft.client.renderer.MultiBufferSource;
-import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.ShapeRenderer;
+import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.List;
@@ -36,7 +36,7 @@ public final class OutlineRenderer {
 		}
 
 		Vec3 cam = ctx.gameRenderer().getMainCamera().getPosition();
-		VertexConsumer lines = consumers.getBuffer(RenderType.lines());
+		VertexConsumer lines = consumers.getBuffer(RenderTypes.lines());
 
 		float alpha = Math.max(0.05f, Math.min(1f, cfg.lineAlpha));
 		for (BlockScanner.Hit hit : hits) {
